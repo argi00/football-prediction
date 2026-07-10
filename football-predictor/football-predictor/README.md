@@ -16,46 +16,70 @@ football-predictor/
 │       ├── model_extras.pkl         # scaler sklearn (le champ "features" qu'il contient est ignoré, voir main.py)
 │       └── football_historical_data.pkl
 ├── frontend/
-│   └── index.html             # UI (HTML/CSS/JS, aucun build nécessaire)
-├── vercel.json                # config de déploiement Vercel (2 services : frontend + backend)
+│   └── index.html             # copie utilisée en local (servie par FastAPI via uvicorn)
+├── public/
+│   └── index.html             # même fichier, copié ici pour que Vercel le serve en statique
+├── requirements.txt            # copie à la racine, pour que Vercel détecte bien FastAPI
+├── vercel.json                 # config de déploiement Vercel (function + rewrite)
 ├── Dockerfile
 └── README.md
 ```
 
-> **Pourquoi deux formats différents ?** Le modèle XGBoost est chargé via
-> `model.load_model("xgb_model.json")` (format natif XGBoost) plutôt que via
-> `joblib.load(...)`, car sérialiser un `XGBClassifier` directement avec
-> pickle/joblib s'est révélé fragile d'une version d'XGBoost à l'autre
-> (erreur `XGBoostError: input stream corrupted` rencontrée en cours de
-> route). Le `scaler` sklearn, lui, reste un objet pickle classique dans
-> `model_extras.pkl` — ce n'est pas lui qui posait problème.
+> **Pourquoi deux formats différents pour le modèle ?** Le modèle XGBoost est
+> chargé via `model.load_model("xgb_model.json")` (format natif XGBoost)
+> plutôt que via `joblib.load(...)`, car sérialiser un `XGBClassifier`
+> directement avec pickle/joblib s'est révélé fragile d'une version
+> d'XGBoost à l'autre (erreur `XGBoostError: input stream corrupted`
+> rencontrée en cours de route). Le `scaler` sklearn, lui, reste un objet
+> pickle classique dans `model_extras.pkl` — ce n'est pas lui qui posait
+> problème.
+
+> **Pourquoi `index.html` est-il dupliqué dans `frontend/` et `public/` ?**
+> `frontend/` est ce que `main.py` sert directement quand tu lances
+> `uvicorn` en local. `public/` est le dossier que Vercel sert nativement en
+> statique, sans passer par une fonction Python. Les deux fichiers doivent
+> rester identiques ; si tu modifies l'un, recopie-le dans l'autre (ou
+> supprime `frontend/` et adapte `main.py` pour pointer vers `public/` en
+> local si tu préfères n'avoir qu'une seule copie).
 
 ## Déploiement sur Vercel (via GitHub)
 
 Ce projet a deux parties (un backend Python et un frontend statique) qui ne
 vivent pas à la racine du dépôt — Vercel ne les détecte donc pas tout seul
-par défaut. Le fichier `vercel.json` à la racine règle ça en déclarant deux
-**services** :
+par défaut. Le fichier `vercel.json` à la racine règle ça avec l'approche
+classique et éprouvée :
 
-- `frontend` → sert `frontend/index.html` directement depuis le CDN
-- `backend` → exécute `backend/main.py` (variable `app`) comme fonction Python
-
-Les règles de `rewrites` envoient tout ce qui commence par `/api/` vers le
-backend, et le reste vers le frontend.
+- **`public/index.html`** est servi automatiquement par le CDN de Vercel à la
+  racine (`/`), sans configuration supplémentaire — c'est un comportement
+  natif de Vercel, indépendant de tout framework.
+- **`backend/main.py`** est déclaré explicitement dans `functions`, et la
+  règle `rewrites` envoie tout ce qui commence par `/api/` vers cette
+  fonction Python.
+- Un `requirements.txt` est dupliqué à la racine du dépôt pour que Vercel
+  détecte bien qu'il s'agit d'un projet FastAPI (la détection automatique se
+  base sur ce fichier au niveau racine).
 
 **Étapes :**
-1. Pousse tout le dossier (`vercel.json` inclus, à la racine du repo) sur GitHub.
+1. Pousse tout le dossier (avec `vercel.json`, `public/` et le
+   `requirements.txt` racine) sur GitHub, à la racine du dépôt.
 2. Sur [vercel.com](https://vercel.com), importe le dépôt.
-3. **Laisse le champ "Root Directory" vide** dans les paramètres du projet — le
-   routage se fait via `vercel.json`, pas via ce réglage.
-4. Déploie. Une fois en ligne, teste `https://ton-projet.vercel.app/api/health`
-   pour vérifier que le backend répond, puis `https://ton-projet.vercel.app/`
-   pour l'interface.
+3. **Laisse le champ "Root Directory" vide** dans les paramètres du projet.
+4. Déploie. Teste `https://ton-projet.vercel.app/api/health` (doit répondre
+   `{"status":"ok",...}`), puis `https://ton-projet.vercel.app/` pour
+   l'interface.
+
+**En local, pour tester exactement comme en production**, utilise `vercel dev`
+à la racine du projet (pas `uvicorn`) :
+```bash
+npm i -g vercel   # si pas déjà installé
+vercel dev
+```
 
 **Si tu obtiens encore un 404 :**
-- Vérifie que `vercel.json` est bien à la racine du dépôt (pas dans `backend/`).
-- Vérifie dans les logs de build Vercel que `backend/requirements.txt` a bien
-  été détecté et installé.
+- Vérifie que `vercel.json`, `public/` et `requirements.txt` sont bien à la
+  racine du dépôt (pas dans `backend/`).
+- Vérifie dans les logs de build/dev que `requirements.txt` a bien été
+  détecté et que les dépendances se sont installées sans erreur.
 - Assure-toi que le champ "Root Directory" du projet Vercel est vide.
 
 **Limite à surveiller** : les fonctions Python de Vercel ont une limite de
