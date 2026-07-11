@@ -1,0 +1,12 @@
+{
+  "name": "football-predictor",
+  "version": "1.0.0",
+  "description": "API FastAPI + frontend React (Vite) pour prédire l'issue d'un match international (victoire domicile / nul / victoire extérieur) à partir d'un modèle XGBoost entraîné en amont.",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
